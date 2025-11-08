@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>裸眼 3D — 高度立體立方體範例（模組版）</title>
+<title>裸眼 3D — 穩定立方體版本</title>
 <style>
 html, body {margin:0; height:100%; background:#000; overflow:hidden; font-family:system-ui;}
 #hud{position:fixed;left:12px;top:12px;background:rgba(0,0,0,0.5);padding:8px 12px;border-radius:8px;color:#fff;font-size:13px; z-index:10;}
@@ -14,31 +14,22 @@ button{background:#111;border:1px solid #333;color:#fff;padding:6px 10px;border-
 <div id="hud">狀態：滑鼠移動或啟用攝影機控制視角 <button id="btnCam">啟用攝影機</button></div>
 <script type="module">
 import * as THREE from 'https://unpkg.com/three@0.158.0/build/three.module.js';
-import { OrbitControls } from 'https://unpkg.com/three@0.158.0/examples/jsm/controls/OrbitControls.js';
-import { EffectComposer } from 'https://unpkg.com/three@0.158.0/examples/jsm/postprocessing/EffectComposer.js';
-import { RenderPass } from 'https://unpkg.com/three@0.158.0/examples/jsm/postprocessing/RenderPass.js';
-import { BokehPass } from 'https://unpkg.com/three@0.158.0/examples/jsm/postprocessing/BokehPass.js';
-
 import { FaceMesh } from 'https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js';
 import { Camera } from 'https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js';
 
 // ----- 場景 -----
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 2000);
-camera.position.z = 5;
+camera.position.set(0,0,5);
 const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.shadowMap.enabled = true;
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
-
-// ----- 後處理 景深 -----
-const composer = new EffectComposer(renderer);
-composer.addPass(new RenderPass(scene, camera));
-const bokehPass = new BokehPass(scene, camera, {focus:2.5, aperture:0.025, maxblur:0.02, width:window.innerWidth, height:window.innerHeight});
-composer.addPass(bokehPass);
 
 // ----- 光源 -----
 const dirLight = new THREE.DirectionalLight(0xffffff, 1);
 dirLight.position.set(5,5,5);
+dirLight.castShadow = true;
 scene.add(dirLight);
 scene.add(new THREE.AmbientLight(0x404040));
 
@@ -48,11 +39,12 @@ const material = new THREE.MeshStandardMaterial({color:0x00aaff, metalness:0.5, 
 const cube = new THREE.Mesh(geometry, material);
 cube.castShadow = true;
 cube.receiveShadow = true;
+cube.position.set(0,0,0);
 scene.add(cube);
 
-// ----- 多層背景 -----
+// ----- 背景星星 -----
 const stars = new THREE.Group();
-for(let i=0;i<300;i++){
+for(let i=0;i<200;i++){
   const starGeo = new THREE.SphereGeometry(Math.random()*0.03,6,6);
   const starMat = new THREE.MeshBasicMaterial({color:0xffffff});
   const star = new THREE.Mesh(starGeo, starMat);
@@ -61,14 +53,15 @@ for(let i=0;i<300;i++){
 }
 scene.add(stars);
 
-// ----- 視差控制 -----
+// ----- 滑鼠控制 -----
 let targetX=0, targetY=0, targetZ=5;
 window.addEventListener('mousemove',(e)=>{
-  if(cameraRunning) return;
-  const nx=(e.clientX/window.innerWidth-0.5)*2;
-  const ny=(e.clientY/window.innerHeight-0.5)*2;
-  targetX = nx*1.5;
-  targetY = -ny*1.0;
+  if(!cameraRunning){
+    const nx=(e.clientX/window.innerWidth-0.5)*2;
+    const ny=(e.clientY/window.innerHeight-0.5)*2;
+    targetX = nx*1.0;
+    targetY = -ny*0.8;
+  }
 });
 
 // ----- 攝影機追蹤 -----
@@ -100,19 +93,22 @@ function onFaceResults(results){
   const midX=(left.x+right.x)/2; const midY=(left.y+right.y)/2;
   const dx=(midX-0.5)*2, dy=(midY-0.5)*2;
   const dist=Math.hypot(left.x-right.x,left.y-right.y);
-  targetX=dx*1.5; targetY=-dy*1.0; targetZ=4+ (0.5-dist)*5;
+  targetX=dx*1.0; targetY=-dy*0.8; targetZ=4+ (0.5-dist)*5;
 }
 
 // ----- 動畫 -----
 function animate(){
   requestAnimationFrame(animate);
   cube.rotation.x +=0.01; cube.rotation.y+=0.015;
+
+  // 攝影機平滑追蹤
   camera.position.x += (targetX-camera.position.x)*0.08;
   camera.position.y += (targetY-camera.position.y)*0.08;
   camera.position.z += (targetZ-camera.position.z)*0.08;
   camera.lookAt(0,0,0);
+
   stars.rotation.y +=0.0005;
-  composer.render();
+  renderer.render(scene, camera);
 }
 animate();
 
@@ -120,7 +116,6 @@ window.addEventListener('resize',()=>{
   camera.aspect=window.innerWidth/window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth,window.innerHeight);
-  composer.setSize(window.innerWidth,window.innerHeight);
 });
 </script>
 </body>
