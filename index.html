@@ -3,133 +3,217 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>裸眼 3D Demo — 自然風景版</title>
+  <title>裸眼 3D — Three.js 真 3D 版本（自然風景）</title>
   <style>
-    :root{
-      --offset-x: 0px;
-      --offset-y: 0px;
-      --barrier-shift: 0px;
-      --barrier-width: 8px;
-      --barrier-gap: 8px;
-      --scale: 1;
-    }
-    html,body{height:100%;margin:0;font-family:system-ui,Segoe UI,Arial}
-    .wrap{height:100%;display:flex;flex-direction:column}
-    header{display:flex;gap:.5rem;padding:.75rem;background:#111;color:#fff;align-items:center}
-    header h1{font-size:1rem;margin:0}
-    .controls{margin-left:auto;display:flex;gap:.5rem;align-items:center}
-    button{background:#1e1e1e;color:#fff;border:1px solid #333;padding:.4rem .65rem;border-radius:6px;cursor:pointer}
-    main{flex:1;display:grid;place-items:center;padding:1rem;background:linear-gradient(#222,#111)}
-
-    .viewport{position:relative;overflow:hidden;width:min(1000px,95vw);aspect-ratio:16/9;background:#000;border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.7);transform:scale(var(--scale))}
-    .layer{position:absolute;inset:0;background-size:cover;background-position:center;transition:transform 120ms linear}
-    .layer.left{transform:translate3d(calc(var(--offset-x) * 1),var(--offset-y),0)}
-    .layer.right{transform:translate3d(calc(var(--offset-x) * -1),var(--offset-y),0);mix-blend-mode:screen;opacity:0.95}
-    .barrier{position:absolute;inset:0;pointer-events:none;}
-    .barrier::before{content:"";position:absolute;inset:0;-webkit-mask-image:repeating-linear-gradient(90deg,rgba(0,0,0,1)calc(var(--barrier-width)),rgba(0,0,0,0)calc(var(--barrier-width)+var(--barrier-gap)));-webkit-mask-position:var(--barrier-shift)0;-webkit-mask-size:calc(var(--barrier-width)+var(--barrier-gap))100%;mask-image:repeating-linear-gradient(90deg,rgba(0,0,0,1)calc(var(--barrier-width)),rgba(0,0,0,0)calc(var(--barrier-width)+var(--barrier-gap)));mask-position:var(--barrier-shift)0;mask-size:calc(var(--barrier-width)+var(--barrier-gap))100%;background:rgba(0,0,0,0.45);mix-blend-mode:normal;}
-    .hud{position:absolute;left:8px;top:8px;background:rgba(255,255,255,0.06);padding:6px 10px;border-radius:8px;color:#fff;font-size:.85rem}
-    .webcam-preview{position:absolute;right:8px;bottom:8px;background:rgba(0,0,0,0.45);padding:6px;border-radius:8px}
-    .webcam-preview video{display:block;width:160px;height:90px;object-fit:cover;border-radius:6px}
-    footer{padding:.5rem .75rem;font-size:.85rem;color:#ddd;background:#0d0d0d}
-    @media (max-width:640px){.webcam-preview video{width:120px;height:68px}}
+    html,body{height:100%;margin:0;font-family:system-ui,Segoe UI,Arial;background:#080808;color:#eee}
+    .topbar{display:flex;align-items:center;gap:12px;padding:12px;background:linear-gradient(90deg,#0b0b0b,#111);}
+    .topbar h1{font-size:1rem;margin:0}
+    .controls{margin-left:auto;display:flex;gap:8px;align-items:center}
+    button{background:#111;border:1px solid #222;color:#fff;padding:6px 10px;border-radius:8px;cursor:pointer}
+    #container{width:100%;height:calc(100% - 56px);display:block}
+    .hud{position:absolute;left:12px;top:64px;background:rgba(0,0,0,0.45);padding:8px 12px;border-radius:8px;color:#fff;font-size:13px}
+    .preview{position:absolute;right:12px;top:64px;background:rgba(0,0,0,0.45);padding:8px;border-radius:8px}
+    .preview video{width:160px;height:90px;border-radius:6px;object-fit:cover}
+    footer{position:absolute;left:12px;bottom:12px;color:#ccc;font-size:12px}
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <header>
-      <h1>裸眼 3D Demo（自然風景）</h1>
-      <div class="controls">
-        <button id="toggleCam">啟用攝影機</button>
-        <button id="reset">重置</button>
-        <label style="color:#ddd;font-size:.9rem;display:flex;align-items:center;gap:.4rem">條紋寬度 <input id="barW" type="range" min="2" max="24" value="8"></label>
-        <label style="color:#ddd;font-size:.9rem;display:flex;align-items:center;gap:.4rem">間距 <input id="barG" type="range" min="0" max="24" value="8"></label>
-      </div>
-    </header>
-
-    <main>
-      <div class="viewport" id="viewport">
-        <div class="layer left" id="leftLayer"></div>
-        <div class="layer right" id="rightLayer"></div>
-        <div class="barrier" id="barrier"></div>
-        <div class="hud" id="hud">狀態: 停用攝影機<br>眼位: --</div>
-        <div class="webcam-preview" id="preview" style="display:none"><video id="camVideo" autoplay muted playsinline></video></div>
-      </div>
-    </main>
-
-    <footer>說明：可使用攝影機或滑鼠模擬眼位，呈現裸眼 3D 效果（自然風景背景）。</footer>
+  <div class="topbar">
+    <h1>裸眼 3D — Three.js 真 3D（自然風景）</h1>
+    <div class="controls">
+      <button id="btnCam">啟用攝影機</button>
+      <button id="btnReset">重置視角</button>
+    </div>
   </div>
 
+  <div id="container"></div>
+  <div class="hud" id="hud">狀態：等待啟動（滑鼠移動可立即測試）</div>
+  <div class="preview" id="preview" style="display:none"><video id="camVideo" autoplay muted playsinline></video></div>
+  <footer>提示：請在 HTTPS（或 localhost）環境下啟用攝影機。</footer>
+
+  <!-- Three.js + MediaPipe -->
+  <script src="https://unpkg.com/three@0.158.0/build/three.min.js"></script>
+  <script src="https://unpkg.com/three@0.158.0/examples/js/controls/OrbitControls.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-  <script>
-    const leftLayer = document.getElementById('leftLayer');
-    const rightLayer = document.getElementById('rightLayer');
-    const imgUrlL = 'https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto=format&fit=crop&w=1600&q=80';
-    const imgUrlR = 'https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto=format&fit=crop&w=1600&q=80';
-    leftLayer.style.backgroundImage = `url(${imgUrlL})`;
-    rightLayer.style.backgroundImage = `url(${imgUrlR})`;
 
-    const viewport = document.getElementById('viewport');
+  <script>
+    // ---------------------- 場景設定（Three.js） ----------------------
+    const container = document.getElementById('container');
     const hud = document.getElementById('hud');
-    const camBtn = document.getElementById('toggleCam');
     const preview = document.getElementById('preview');
     const camVideo = document.getElementById('camVideo');
-    const resetBtn = document.getElementById('reset');
-    const barW = document.getElementById('barW');
-    const barG = document.getElementById('barG');
 
-    function setOffset(xPx,yPx,barrierShiftPx){
-      document.documentElement.style.setProperty('--offset-x',`${xPx}px`);
-      document.documentElement.style.setProperty('--offset-y',`${yPx}px`);
-      document.documentElement.style.setProperty('--barrier-shift',`${barrierShiftPx}px`);
-    }
-    function setBarrierParams(w,g){
-      document.documentElement.style.setProperty('--barrier-width',w+'px');
-      document.documentElement.style.setProperty('--barrier-gap',g+'px');
-    }
+    const scene = new THREE.Scene();
+    const renderer = new THREE.WebGLRenderer({antialias:true});
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setSize(window.innerWidth, window.innerHeight - 56);
+    container.appendChild(renderer.domElement);
 
-    setBarrierParams(barW.value,barG.value);
-    barW.addEventListener('input',()=>setBarrierParams(barW.value,barG.value));
-    barG.addEventListener('input',()=>setBarrierParams(barW.value,barG.value));
-    resetBtn.addEventListener('click',()=>{setOffset(0,0,0);hud.innerHTML='狀態: 停用攝影機<br>眼位: --';});
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / (window.innerHeight - 56), 0.1, 2000);
+    camera.position.set(0, 0, 700);
+    scene.add(camera);
 
-    let cameraRunning=false,camera;
+    // 控制器（僅供除錯/調整）
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.enablePan = false;
+    controls.enableRotate = false; // 我們以程式控制 camera
 
-    const faceMesh=new FaceMesh({locateFile:file=>`https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`});
-    faceMesh.setOptions({maxNumFaces:1,refineLandmarks:true,minDetectionConfidence:0.6,minTrackingConfidence:0.6});
-    faceMesh.onResults(onResults);
+    // 光源
+    const hemi = new THREE.HemisphereLight(0xffffff, 0x444444, 1.0);
+    hemi.position.set(0, 200, 0);
+    scene.add(hemi);
+
+    // 載入三層不同深度的平面（foreground, midground, background）
+    // 你可以替換成左/中/右三張不同深度的素材
+    const loader = new THREE.TextureLoader();
+    const bgUrl = 'https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto=format&fit=crop&w=2000&q=80';
+
+    const layers = []; // each: {mesh, depth}
+    const layerConfigs = [
+      {depth:-300, scale:1.9, zOffset: -200}, // 背景（遠）
+      {depth:-120, scale:1.15, zOffset: -120}, // 中景
+      {depth:20, scale:0.9, zOffset: 0}       // 前景（近）
+    ];
+
+    // create plane geometry
+    const geo = new THREE.PlaneGeometry(1600, 900);
+
+    loader.load(bgUrl, (tex) => {
+      // 為每一層創建材質（可使用相同底圖並略為裁切或調整曝光）
+      layerConfigs.forEach((cfg, i) => {
+        const mat = new THREE.MeshBasicMaterial({map:tex.clone(), transparent:false});
+        // 製作小變化讓層與層看起來不一樣
+        if (i===0) { mat.map.offset.set(0,0); mat.map.repeat.set(1,1); mat.opacity = 1; }
+        if (i===1) { mat.map.offset.set(0.02,0.03); mat.map.repeat.set(0.96,0.96); mat.opacity = 1; }
+        if (i===2) { mat.map.offset.set(-0.03,-0.02); mat.map.repeat.set(0.98,0.98); mat.opacity = 1; }
+
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.position.z = cfg.zOffset;
+        mesh.scale.set(cfg.scale, cfg.scale, 1);
+        scene.add(mesh);
+        layers.push({mesh, depth:cfg.depth});
+      });
+    });
+
+    // 簡單前景物件（樹或岩石）-- 使用 plane 加 alpha 圖即可替代
+    // (此 demo 以純圖層 parallax 為主)
+
+    // ---------------------- 視角繫結 (Head tracking / Mouse fallback) ----------------------
+    let useCamera = false;
+    let cameraRunning = false;
+    let mediaCamera;
+
+    // MediaPipe FaceMesh
+    const faceMesh = new FaceMesh({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`});
+    faceMesh.setOptions({maxNumFaces:1, refineLandmarks:true, minDetectionConfidence:0.55, minTrackingConfidence:0.55});
+    faceMesh.onResults(onFaceResults);
 
     async function startCamera(){
-      if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){alert('此瀏覽器不支援攝影機，請使用 HTTPS 或新版瀏覽器。');return;}
-      if(cameraRunning)return;
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { alert('此環境不支援攝影機（需 HTTPS/localhost）。會使用滑鼠模式作為替代。'); return; }
       try{
-        camera=new Camera(camVideo,{onFrame:async()=>{await faceMesh.send({image:camVideo});},width:640,height:480});
-        await camera.start();
-        cameraRunning=true;preview.style.display='';hud.innerHTML='狀態: 偵測中...';camBtn.textContent='停用攝影機';
-      }catch(e){console.error(e);alert('無法啟用攝影機。');}
+        mediaCamera = new Camera(camVideo, {onFrame: async ()=>{await faceMesh.send({image: camVideo});}, width: 640, height: 480});
+        await mediaCamera.start();
+        cameraRunning = true; preview.style.display = '';
+        hud.innerText = '狀態：攝影機啟動，進行人臉追蹤...';
+        document.getElementById('btnCam').innerText = '停用攝影機';
+      }catch(e){console.error(e);alert('無法啟動攝影機：'+e.message);}
     }
-    function stopCamera(){if(camera&&camera.stop)camera.stop();cameraRunning=false;preview.style.display='none';camBtn.textContent='啟用攝影機';hud.innerHTML='狀態: 停用攝影機<br>眼位: --';setOffset(0,0,0);}
-    camBtn.addEventListener('click',()=>{if(!cameraRunning)startCamera();else stopCamera();});
+    function stopCamera(){ if (mediaCamera && mediaCamera.stop) mediaCamera.stop(); cameraRunning=false; preview.style.display='none'; document.getElementById('btnCam').innerText='啟用攝影機'; hud.innerText='狀態：已停用攝影機'; }
 
-    function onResults(results){
-      if(!results.multiFaceLandmarks||!results.multiFaceLandmarks.length){hud.innerHTML='狀態: 找不到臉部';return setOffset(0,0,0);}
-      const lm=results.multiFaceLandmarks[0];
-      const L=[33,133,159,145],R=[362,263,386,374];
-      const avg=i=>i.map(j=>lm[j]).reduce((a,b)=>({x:a.x+b.x/ i.length,y:a.y+b.y/ i.length,z:a.z+b.z/ i.length}),{x:0,y:0,z:0});
-      const Lp=avg(L),Rp=avg(R);
-      const vw=camVideo.videoWidth||640,vh=camVideo.videoHeight||480;
-      const Lx=Lp.x*vw,Rx=Rp.x*vw,Ly=Lp.y*vh,Ry=Rp.y*vh;
-      const midX=(Lx+Rx)/2,midY=(Ly+Ry)/2,dist=Math.hypot(Lx-Rx,Ly-Ry);
-      const dx=midX-vw/2;const sens=0.08,bsens=0.9;
-      const scale=Math.max(0.6,Math.min(1.6,dist/70));
-      const xOff=dx*sens*scale,yOff=(midY-vh/2)*0.02*scale,bShift=-dx*bsens*0.6;
-      setOffset(xOff,yOff,bShift);
-      hud.innerHTML=`狀態: 偵測中<br>眼位: midX=${Math.round(midX)}, midY=${Math.round(midY)}<br>眼距:${Math.round(dist)}px`;
+    document.getElementById('btnCam').addEventListener('click', ()=>{
+      if (!cameraRunning) startCamera(); else stopCamera();
+    });
+
+    document.getElementById('btnReset').addEventListener('click', ()=>{
+      targetCamX = targetCamY = 0; targetCamZ = 700; hud.innerText='狀態：視角已重置';
+    });
+
+    // 映射值
+    let targetCamX = 0, targetCamY = 0, targetCamZ = 700;
+
+    function onFaceResults(results){
+      if (!results.multiFaceLandmarks || !results.multiFaceLandmarks.length) { hud.innerText = '狀態：找不到臉部，請將臉靠近鏡頭或使用滑鼠控制'; return; }
+      const lm = results.multiFaceLandmarks[0];
+      // 我們取兩眼與鼻尖作為參考
+      const left = lm[33]; const right = lm[263]; const nose = lm[1];
+
+      const vw = camVideo.videoWidth || 640, vh = camVideo.videoHeight || 480;
+      const leftX = left.x * vw, rightX = right.x * vw, midX = (leftX + rightX)/2;
+      const leftY = left.y * vh, rightY = right.y * vh, midY = (leftY + rightY)/2;
+      const inter = Math.hypot(leftX - rightX, leftY - rightY);
+
+      // dx relative to center (-1..1)
+      const dxNorm = (midX - vw/2) / (vw/2);
+      const dyNorm = (midY - vh/2) / (vh/2);
+
+      // 轉換為 camera 目標位置（可調整參數增減視差強度）
+      const maxX = 120; // 左右最大偏移
+      const maxY = 80;  // 上下最大偏移
+      const depthBase = 700;
+      const depthAdjust = (inter - 70) * 2; // 眼距變化反應（簡單映射）
+
+      targetCamX = dxNorm * maxX;
+      targetCamY = -dyNorm * maxY; // 影像 y 向與 three.js y 反向
+      targetCamZ = depthBase - depthAdjust;
+
+      hud.innerText = `狀態：偵測中（人臉）\n眼距: ${Math.round(inter)} px\n相機目標: ${Math.round(targetCamX)}, ${Math.round(targetCamY)}, ${Math.round(targetCamZ)}`;
     }
 
-    let drag=false;viewport.addEventListener('pointerdown',e=>{drag=true;viewport.setPointerCapture(e.pointerId)});
-    viewport.addEventListener('pointerup',e=>{drag=false;viewport.releasePointerCapture(e.pointerId)});
-    viewport.addEventListener('pointermove',e=>{if(!drag)return;const r=viewport.getBoundingClientRect();const cx=e.clientX-r.left-r.width/2;const cy=e.clientY-r.top-r.height/2;setOffset(cx*0.04,cy*0.02,-cx*0.6);});
+    // 滑鼠控制 fallback（即時模擬 camera 移動）
+    let isPointerDown = false;
+    window.addEventListener('pointerdown', () => isPointerDown = true);
+    window.addEventListener('pointerup', () => isPointerDown = false);
+    window.addEventListener('pointermove', (e) => {
+      if (cameraRunning) return; // 當攝影機啟動時優先使用攝影機輸入
+      const cx = (e.clientX / window.innerWidth - 0.5) * 2; // -1..1
+      const cy = (e.clientY / (window.innerHeight-56) - 0.5) * 2; // -1..1
+      targetCamX = cx * 120;
+      targetCamY = -cy * 80;
+      targetCamZ = 700;
+      hud.innerText = `狀態：滑鼠控制\n相機目標: ${Math.round(targetCamX)}, ${Math.round(targetCamY)}, ${Math.round(targetCamZ)}`;
+    });
+
+    // ---------------------- 動畫迴圈 ----------------------
+    function animate(){
+      requestAnimationFrame(animate);
+
+      // 平滑移動 camera 到目標
+      camera.position.x += (targetCamX - camera.position.x) * 0.08;
+      camera.position.y += (targetCamY - camera.position.y) * 0.08;
+      camera.position.z += (targetCamZ - camera.position.z) * 0.06;
+
+      // camera 看向場景中心的某個點（可加入微調）
+      camera.lookAt(0, 0, 0);
+
+      // 為每一層依 depth 做微小位移以放大景深差（視差）
+      layers.forEach(l => {
+        if (!l.mesh) return;
+        // 計算基於 camera 位移的偏移（Z 深度越小偏移越大）
+        const factor = THREE.MathUtils.mapLinear(l.depth, -300, 50, 0.2, 1.0);
+        l.mesh.position.x = -camera.position.x * (0.002 * factor);
+        l.mesh.position.y = -camera.position.y * (0.002 * factor);
+      });
+
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    // resize
+    window.addEventListener('resize', ()=>{
+      renderer.setSize(window.innerWidth, window.innerHeight - 56);
+      camera.aspect = window.innerWidth / (window.innerHeight - 56);
+      camera.updateProjectionMatrix();
+    });
+
+    // 自動提示：若不在 HTTPS/localhost 則提示並保持滑鼠模式
+    if (!location.protocol.startsWith('https') && location.hostname !== 'localhost'){
+      hud.innerText = '警告：非安全來源 (HTTP)。若要開啟攝影機請使用 HTTPS 或 localhost。可先用滑鼠測試。';
+    } else {
+      hud.innerText = '就緒：按「啟用攝影機」啟用人臉追蹤，或用滑鼠移動模擬視角。';
+    }
   </script>
 </body>
 </html>
