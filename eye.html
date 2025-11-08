@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>裸眼 3D Demo — 自然風景版</title>
+  <style>
+    :root{
+      --offset-x: 0px;
+      --offset-y: 0px;
+      --barrier-shift: 0px;
+      --barrier-width: 8px;
+      --barrier-gap: 8px;
+      --scale: 1;
+    }
+    html,body{height:100%;margin:0;font-family:system-ui,Segoe UI,Arial}
+    .wrap{height:100%;display:flex;flex-direction:column}
+    header{display:flex;gap:.5rem;padding:.75rem;background:#111;color:#fff;align-items:center}
+    header h1{font-size:1rem;margin:0}
+    .controls{margin-left:auto;display:flex;gap:.5rem;align-items:center}
+    button{background:#1e1e1e;color:#fff;border:1px solid #333;padding:.4rem .65rem;border-radius:6px;cursor:pointer}
+    main{flex:1;display:grid;place-items:center;padding:1rem;background:linear-gradient(#222,#111)}
+
+    .viewport{position:relative;overflow:hidden;width:min(1000px,95vw);aspect-ratio:16/9;background:#000;border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.7);transform:scale(var(--scale))}
+    .layer{position:absolute;inset:0;background-size:cover;background-position:center;transition:transform 120ms linear}
+    .layer.left{transform:translate3d(calc(var(--offset-x) * 1),var(--offset-y),0)}
+    .layer.right{transform:translate3d(calc(var(--offset-x) * -1),var(--offset-y),0);mix-blend-mode:screen;opacity:0.95}
+    .barrier{position:absolute;inset:0;pointer-events:none;}
+    .barrier::before{content:"";position:absolute;inset:0;-webkit-mask-image:repeating-linear-gradient(90deg,rgba(0,0,0,1)calc(var(--barrier-width)),rgba(0,0,0,0)calc(var(--barrier-width)+var(--barrier-gap)));-webkit-mask-position:var(--barrier-shift)0;-webkit-mask-size:calc(var(--barrier-width)+var(--barrier-gap))100%;mask-image:repeating-linear-gradient(90deg,rgba(0,0,0,1)calc(var(--barrier-width)),rgba(0,0,0,0)calc(var(--barrier-width)+var(--barrier-gap)));mask-position:var(--barrier-shift)0;mask-size:calc(var(--barrier-width)+var(--barrier-gap))100%;background:rgba(0,0,0,0.45);mix-blend-mode:normal;}
+    .hud{position:absolute;left:8px;top:8px;background:rgba(255,255,255,0.06);padding:6px 10px;border-radius:8px;color:#fff;font-size:.85rem}
+    .webcam-preview{position:absolute;right:8px;bottom:8px;background:rgba(0,0,0,0.45);padding:6px;border-radius:8px}
+    .webcam-preview video{display:block;width:160px;height:90px;object-fit:cover;border-radius:6px}
+    footer{padding:.5rem .75rem;font-size:.85rem;color:#ddd;background:#0d0d0d}
+    @media (max-width:640px){.webcam-preview video{width:120px;height:68px}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>裸眼 3D Demo（自然風景）</h1>
+      <div class="controls">
+        <button id="toggleCam">啟用攝影機</button>
+        <button id="reset">重置</button>
+        <label style="color:#ddd;font-size:.9rem;display:flex;align-items:center;gap:.4rem">條紋寬度 <input id="barW" type="range" min="2" max="24" value="8"></label>
+        <label style="color:#ddd;font-size:.9rem;display:flex;align-items:center;gap:.4rem">間距 <input id="barG" type="range" min="0" max="24" value="8"></label>
+      </div>
+    </header>
+
+    <main>
+      <div class="viewport" id="viewport">
+        <div class="layer left" id="leftLayer"></div>
+        <div class="layer right" id="rightLayer"></div>
+        <div class="barrier" id="barrier"></div>
+        <div class="hud" id="hud">狀態: 停用攝影機<br>眼位: --</div>
+        <div class="webcam-preview" id="preview" style="display:none"><video id="camVideo" autoplay muted playsinline></video></div>
+      </div>
+    </main>
+
+    <footer>說明：可使用攝影機或滑鼠模擬眼位，呈現裸眼 3D 效果（自然風景背景）。</footer>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+  <script>
+    const leftLayer = document.getElementById('leftLayer');
+    const rightLayer = document.getElementById('rightLayer');
+    const imgUrlL = 'https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto=format&fit=crop&w=1600&q=80';
+    const imgUrlR = 'https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto=format&fit=crop&w=1600&q=80';
+    leftLayer.style.backgroundImage = `url(${imgUrlL})`;
+    rightLayer.style.backgroundImage = `url(${imgUrlR})`;
+
+    const viewport = document.getElementById('viewport');
+    const hud = document.getElementById('hud');
+    const camBtn = document.getElementById('toggleCam');
+    const preview = document.getElementById('preview');
+    const camVideo = document.getElementById('camVideo');
+    const resetBtn = document.getElementById('reset');
+    const barW = document.getElementById('barW');
+    const barG = document.getElementById('barG');
+
+    function setOffset(xPx,yPx,barrierShiftPx){
+      document.documentElement.style.setProperty('--offset-x',`${xPx}px`);
+      document.documentElement.style.setProperty('--offset-y',`${yPx}px`);
+      document.documentElement.style.setProperty('--barrier-shift',`${barrierShiftPx}px`);
+    }
+    function setBarrierParams(w,g){
+      document.documentElement.style.setProperty('--barrier-width',w+'px');
+      document.documentElement.style.setProperty('--barrier-gap',g+'px');
+    }
+
+    setBarrierParams(barW.value,barG.value);
+    barW.addEventListener('input',()=>setBarrierParams(barW.value,barG.value));
+    barG.addEventListener('input',()=>setBarrierParams(barW.value,barG.value));
+    resetBtn.addEventListener('click',()=>{setOffset(0,0,0);hud.innerHTML='狀態: 停用攝影機<br>眼位: --';});
+
+    let cameraRunning=false,camera;
+
+    const faceMesh=new FaceMesh({locateFile:file=>`https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`});
+    faceMesh.setOptions({maxNumFaces:1,refineLandmarks:true,minDetectionConfidence:0.6,minTrackingConfidence:0.6});
+    faceMesh.onResults(onResults);
+
+    async function startCamera(){
+      if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){alert('此瀏覽器不支援攝影機，請使用 HTTPS 或新版瀏覽器。');return;}
+      if(cameraRunning)return;
+      try{
+        camera=new Camera(camVideo,{onFrame:async()=>{await faceMesh.send({image:camVideo});},width:640,height:480});
+        await camera.start();
+        cameraRunning=true;preview.style.display='';hud.innerHTML='狀態: 偵測中...';camBtn.textContent='停用攝影機';
+      }catch(e){console.error(e);alert('無法啟用攝影機。');}
+    }
+    function stopCamera(){if(camera&&camera.stop)camera.stop();cameraRunning=false;preview.style.display='none';camBtn.textContent='啟用攝影機';hud.innerHTML='狀態: 停用攝影機<br>眼位: --';setOffset(0,0,0);}
+    camBtn.addEventListener('click',()=>{if(!cameraRunning)startCamera();else stopCamera();});
+
+    function onResults(results){
+      if(!results.multiFaceLandmarks||!results.multiFaceLandmarks.length){hud.innerHTML='狀態: 找不到臉部';return setOffset(0,0,0);}
+      const lm=results.multiFaceLandmarks[0];
+      const L=[33,133,159,145],R=[362,263,386,374];
+      const avg=i=>i.map(j=>lm[j]).reduce((a,b)=>({x:a.x+b.x/ i.length,y:a.y+b.y/ i.length,z:a.z+b.z/ i.length}),{x:0,y:0,z:0});
+      const Lp=avg(L),Rp=avg(R);
+      const vw=camVideo.videoWidth||640,vh=camVideo.videoHeight||480;
+      const Lx=Lp.x*vw,Rx=Rp.x*vw,Ly=Lp.y*vh,Ry=Rp.y*vh;
+      const midX=(Lx+Rx)/2,midY=(Ly+Ry)/2,dist=Math.hypot(Lx-Rx,Ly-Ry);
+      const dx=midX-vw/2;const sens=0.08,bsens=0.9;
+      const scale=Math.max(0.6,Math.min(1.6,dist/70));
+      const xOff=dx*sens*scale,yOff=(midY-vh/2)*0.02*scale,bShift=-dx*bsens*0.6;
+      setOffset(xOff,yOff,bShift);
+      hud.innerHTML=`狀態: 偵測中<br>眼位: midX=${Math.round(midX)}, midY=${Math.round(midY)}<br>眼距:${Math.round(dist)}px`;
+    }
+
+    let drag=false;viewport.addEventListener('pointerdown',e=>{drag=true;viewport.setPointerCapture(e.pointerId)});
+    viewport.addEventListener('pointerup',e=>{drag=false;viewport.releasePointerCapture(e.pointerId)});
+    viewport.addEventListener('pointermove',e=>{if(!drag)return;const r=viewport.getBoundingClientRect();const cx=e.clientX-r.left-r.width/2;const cy=e.clientY-r.top-r.height/2;setOffset(cx*0.04,cy*0.02,-cx*0.6);});
+  </script>
+</body>
+</html>
